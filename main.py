@@ -1,14 +1,13 @@
-import json
 from typing import Annotated
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.messages import ToolMessage
 from typing_extensions import TypedDict
 
 from env import set_keys
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 
 set_keys()
 
@@ -17,57 +16,21 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
-graph_builder = StateGraph(State)
-
-
-def chatbot(state: State):
-    return {"messages": [llm.invoke(state["messages"])]}
-
-
-graph_builder.add_node("chatbot", chatbot)
-graph_builder.set_entry_point("chatbot")
-
 tavily_search = TavilySearchResults(max_results=2)
 tools = [tavily_search]
 llm = ChatAnthropic(model="claude-3-5-sonnet-20240620").bind_tools(tools)
 
-
-class BasicToolNode:
-    def __init__(self, tools: list) -> None:
-        self.tools_by_name = {tool.name: tool for tool in tools}
-
-    def __call__(self, inputs: dict):
-        if messages := inputs.get("messages", []):
-            message = messages[-1]
-        else:
-            raise ValueError("No message found")
-
-        outputs = []
-        for tool_call in message.tool_calls:
-            result = self.tools_by_name[tool_call["name"]].invoke(tool_call["args"])
-            outputs.append(
-                ToolMessage(
-                    content=json.dumps(result),
-                    name=tool_call["name"],
-                    tool_call_id=tool_call["id"],
-                )
-            )
-
-        return {"messages": outputs}
+graph_builder = StateGraph(State)
 
 
-def route_tools(state: State):
-    messages = state["messages"]
-
-    if len(messages) and messages[-1].tool_calls:
-        return "tools"
-
-    return END
-
-
-tool_node = BasicToolNode(tools=tools)
+graph_builder.add_node(
+    "chatbot", lambda state: {"messages": [llm.invoke(state["messages"])]}
+)
+tool_node = ToolNode(tools=tools)
 graph_builder.add_node("tools", tool_node)
-graph_builder.add_conditional_edges("chatbot", route_tools)
+
+graph_builder.set_entry_point("chatbot")
+graph_builder.add_conditional_edges("chatbot", tools_condition)
 graph_builder.add_edge("tools", "chatbot")
 
 graph = graph_builder.compile()
