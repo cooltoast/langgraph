@@ -7,5 +7,6 @@ def _set_env(var: str):
         os.environ[var] = getpass.getpass(f"{var}: ")
 
 
-def set_key():
+def set_keys():
     _set_env("ANTHROPIC_API_KEY")
+    _set_env("TAVILY_API_KEY")
