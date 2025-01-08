@@ -38,11 +38,10 @@ graph_builder.add_conditional_edges("chatbot", tools_condition)
 graph_builder.add_edge("tools", "chatbot")
 
 
-def stream_graph_updates(user_input: str, thread: str, interrupt_tools: bool):
-    graph = graph_builder.compile(
-        checkpointer=memory, interrupt_before=(["tools"] if interrupt_tools else [])
-    )
+graph = graph_builder.compile(checkpointer=memory, interrupt_before=["tools"])
 
+
+def stream_graph_updates(user_input: str, thread: str):
     for value in graph.stream(
         {"messages": [("user", user_input)]},
         {"configurable": {"thread_id": thread}},
@@ -55,12 +54,11 @@ def run_chatbot():
     while True:
         user_input = input("User: ")
         thread = input("Thread (enter for default): ") or DEFAULT_THREAD_ID
-        interrupt_tools = input("Interrupt Tools (y/N): ").lower() == "y"
         if user_input.lower() in ["quit", "exit", "q"]:
             print("Goodbye!")
             break
 
-        stream_graph_updates(user_input, thread, interrupt_tools)
+        stream_graph_updates(user_input, thread)
 
 
 if __name__ == "__main__":
